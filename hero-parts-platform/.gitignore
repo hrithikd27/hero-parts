@@ -1,0 +1,17 @@
+target/
+*.class
+*.jar
+
+# H2 database files — never commit these
+data/
+*.mv.db
+*.trace.db
+
+# IntelliJ
+.idea/
+*.iml
+
+# Env / secrets
+.env
+.env.local
+application-local.properties

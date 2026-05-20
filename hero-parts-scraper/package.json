@@ -1,0 +1,13 @@
+{
+  "name": "hero-parts-scraper",
+  "version": "1.0.0",
+  "description": "Playwright scraper for Hero MotoCorp eShop spare parts",
+  "type": "module",
+  "scripts": {
+    "scrape": "node scraper.js",
+    "install-browsers": "npx playwright install chromium"
+  },
+  "dependencies": {
+    "playwright": "^1.45.0"
+  }
+}

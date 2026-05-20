@@ -1,0 +1,29 @@
+#!/bin/sh
+# Hero Parts Platform - Maven Wrapper (auto-downloads Maven 3.9.9 on first run)
+set -e
+
+MAVEN_VERSION="3.9.9"
+MAVEN_DIST_DIR="$HOME/.m2/wrapper/dists/apache-maven-$MAVEN_VERSION"
+MVN_CMD="$MAVEN_DIST_DIR/bin/mvn"
+
+if [ ! -f "$MVN_CMD" ]; then
+  echo "[INFO] Maven $MAVEN_VERSION not found. Downloading..."
+  DOWNLOAD_URL="https://repo.maven.apache.org/maven2/org/apache/maven/apache-maven/$MAVEN_VERSION/apache-maven-$MAVEN_VERSION-bin.tar.gz"
+  TMP_FILE="/tmp/apache-maven-$MAVEN_VERSION-bin.tar.gz"
+
+  if command -v curl >/dev/null 2>&1; then
+    curl -fsSL "$DOWNLOAD_URL" -o "$TMP_FILE"
+  elif command -v wget >/dev/null 2>&1; then
+    wget -q "$DOWNLOAD_URL" -O "$TMP_FILE"
+  else
+    echo "[ERROR] Neither curl nor wget found. Please install Maven manually."
+    exit 1
+  fi
+
+  mkdir -p "$HOME/.m2/wrapper/dists"
+  tar -xzf "$TMP_FILE" -C "$HOME/.m2/wrapper/dists"
+  rm "$TMP_FILE"
+  echo "[INFO] Maven $MAVEN_VERSION installed to $MAVEN_DIST_DIR"
+fi
+
+exec "$MVN_CMD" "$@"
