@@ -37,8 +37,7 @@ data/
 .claude/
 hero-parts-platform/.claude/
 
-# Cloud config with API keys — keep secrets out of git
-hero-parts-platform/src/main/resources/application-cloud.properties
+# application-cloud.properties is now tracked — it uses ${ENV_VAR} syntax, no secrets
 
 # Accidentally created files
 hero-parts-platform/UsershrithOneDriveDesktoppartshero-parts-frontend.env
