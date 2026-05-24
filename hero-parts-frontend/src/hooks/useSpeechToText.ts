@@ -28,7 +28,7 @@ export function useSpeechToText(): UseSpeechToText {
   }, [])
 
   const start = useCallback(
-    (onInterim: (t: string) => void, onFinal: (t: string) => void) => {
+    (onInterim: (t: string) => void, onFinal: (t: string, alternatives: string[]) => void) => {
       if (!supported) return
 
       // Abort any previous session cleanly before starting a new one
