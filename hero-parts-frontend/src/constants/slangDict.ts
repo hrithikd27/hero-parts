@@ -1,6 +1,38 @@
 // Layer 2 — slang → English part name injection
 export const SLANG_DICT: Record<string, string> = {
 
+  // ── Canonical multi-word English part names ───────────────────────
+  // Adding these as keys means the slang-dict sub-phrase scanner can
+  // extract them from compound queries like "engine spark plug" → "spark plug",
+  // "replace air filter" → "air filter", without needing Claude translation.
+  'spark plug':           'spark plug',
+  'spark plug cap':       'spark plug cap',
+  'spark plug wire':      'spark plug wire',
+  'oil filter':           'oil filter',
+  'air filter':           'air filter',
+  'fuel filter':          'fuel filter',
+  'brake shoe':           'brake shoe',
+  'brake disc':           'brake disc',
+  'brake pad':            'brake pad',
+  'brake cable':          'brake cable',
+  'brake lever':          'brake lever',
+  'clutch plate':         'clutch plate',
+  'clutch cable':         'clutch cable',
+  'clutch lever':         'clutch lever',
+  'chain sprocket':       'chain sprocket',
+  'shock absorber':       'shock absorber',
+  'front fork':           'front fork',
+  'inner tube':           'inner tube',
+  'throttle cable':       'throttle cable',
+  'fuel pipe':            'fuel pipe',
+  'oil seal':             'oil seal',
+  'head bearing':         'steering head bearing',
+  'speedometer cable':    'speedometer cable',
+  'tail light':           'tail light',
+  'head light':           'headlight',
+  'headlight bulb':       'headlight bulb',
+  'indicator bulb':       'indicator bulb',
+
   // ── Ignition / spark ──────────────────────────────────────────────
   masala:                 'spark plug',
   masale:                 'spark plug',
@@ -92,6 +124,7 @@ export const SLANG_DICT: Record<string, string> = {
   pahiya:                 'tyre',          // Hindi/Marathi for wheel — only tyres in DB
   pahiye:                 'tyre',
   chakka:                 'tyre',
+  tire:                   'tyre',          // American spelling → British (DB uses "tyre")
   tiar:                   'tyre',
   tirr:                   'tyre',
   tube:                   'inner tube',

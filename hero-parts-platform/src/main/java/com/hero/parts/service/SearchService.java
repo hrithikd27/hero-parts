@@ -33,7 +33,11 @@ public class SearchService {
         "motorcycle", "motorbike", "bike", "vehicle", "scooter", "moped", "two", "wheeler",
         "part", "parts", "spare", "component", "assembly", "unit", "piece", "item",
         "hero", "honda", "bajaj", "suzuki", "yamaha", "tvs", "royal", "enfield",
-        "original", "genuine", "oem", "aftermarket", "compatible", "fits", "with"
+        "original", "genuine", "oem", "aftermarket", "compatible", "fits", "with",
+        // "engine" is too broad in a bike-parts catalogue — nearly every part is engine-related.
+        // Keeping it as a standalone keyword just adds noise; meaningful queries always
+        // pair it with a specific part ("engine spark plug", "engine oil filter").
+        "engine"
     );
 
     private final PartRepository partRepository;
@@ -110,25 +114,59 @@ public class SearchService {
             }
         }
 
-        // 6. Multi-word fallback: if the query has multiple words and results are still sparse,
-        //    search each meaningful word independently so "steering head bearing" finds bearing parts.
+        // 6. Multi-word fallback: try sub-phrases longest-first.
+        //    Key rule: if ANY multi-word phrase (len>=2) finds results, single-word-only
+        //    hits are excluded entirely. This prevents "engine spark plug" from polluting
+        //    spark-plug results with "engine oil filter" / "engine ring" hits.
         if (ranked.size() < 3 && query.contains(" ")) {
-            String[] words = query.split("\\s+");
-            for (String word : words) {
-                if (word.length() <= 3 || GENERIC_WORDS.contains(word)) continue;
-                List<Part> wordHits = partRepository.searchByNameOrDescription(word);
-                for (Part p : wordHits) {
-                    if (ranked.stream().noneMatch(r -> r.part.getId().equals(p.getId()))) {
-                        ranked.add(new RankedResult(p, word, "WORD_FALLBACK", 0.45));
-                        if (matchType == MatchType.NO_RESULT) matchType = MatchType.FUZZY;
+            List<String> sig = Arrays.stream(query.split("\\s+"))
+                .map(String::toLowerCase)
+                .filter(w -> w.length() > 3 && !GENERIC_WORDS.contains(w))
+                .collect(Collectors.toList());
+            int totalSig = Math.max(1, sig.size());
+
+            Map<Long, Double>  bestScore  = new HashMap<>();
+            Map<Long, Integer> bestLen    = new HashMap<>(); // phrase length that produced the best score
+            Map<Long, String>  bestTerm   = new HashMap<>();
+            Map<Long, Part>    partCache  = new HashMap<>();
+
+            for (int len = sig.size(); len >= 1; len--) {
+                double phraseScore = 0.10 + 0.55 * ((double) len / totalSig);
+                for (int start = 0; start + len <= sig.size(); start++) {
+                    String phrase = String.join(" ", sig.subList(start, start + len));
+                    for (Part p : partRepository.searchByNameOrDescription(phrase)) {
+                        partCache.put(p.getId(), p);
+                        if (phraseScore > bestScore.getOrDefault(p.getId(), 0.0)) {
+                            bestScore.put(p.getId(), phraseScore);
+                            bestLen.put(p.getId(), len);
+                            bestTerm.put(p.getId(), phrase);
+                        }
+                    }
+                    for (SearchAlias a : aliasRepository.findByAliasContaining(phrase)) {
+                        long pid = a.getPart().getId();
+                        partCache.put(pid, a.getPart());
+                        double s = phraseScore + 0.05;
+                        if (s > bestScore.getOrDefault(pid, 0.0)) {
+                            bestScore.put(pid, s);
+                            bestLen.put(pid, len);
+                            bestTerm.put(pid, a.getAlias());
+                        }
                     }
                 }
-                List<SearchAlias> wordAliases = aliasRepository.findByAliasContaining(word);
-                for (SearchAlias a : wordAliases) {
-                    if (ranked.stream().noneMatch(r -> r.part.getId().equals(a.getPart().getId()))) {
-                        ranked.add(new RankedResult(a.getPart(), a.getAlias(), a.getAliasType().name(), 0.45));
-                        if (matchType == MatchType.NO_RESULT) matchType = MatchType.FUZZY;
-                    }
+            }
+
+            // If any multi-word phrase matched, require all included results to also
+            // have been matched by a multi-word phrase (suppress single-word noise).
+            int maxPhraseLen = bestLen.values().stream().mapToInt(Integer::intValue).max().orElse(0);
+            int minAcceptable = maxPhraseLen >= 2 ? 2 : 1;
+
+            for (Map.Entry<Long, Double> e : bestScore.entrySet()) {
+                long pid = e.getKey();
+                if (bestLen.getOrDefault(pid, 0) < minAcceptable) continue;
+                if (ranked.stream().noneMatch(r -> r.part.getId().equals(pid))) {
+                    ranked.add(new RankedResult(partCache.get(pid), bestTerm.get(pid),
+                        "WORD_FALLBACK", e.getValue()));
+                    if (matchType == MatchType.NO_RESULT) matchType = MatchType.FUZZY;
                 }
             }
         }

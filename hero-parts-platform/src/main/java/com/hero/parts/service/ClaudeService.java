@@ -82,7 +82,10 @@ public class ClaudeService {
             - Return ONLY the canonical English search term — 1 to 5 words, no explanation, no punctuation, no quotes.
             - Always pick the closest AVAILABLE PART. Never invent a part not on the list.
             - If the query describes a symptom, return the most likely faulty part name.
-            - If the query is already clear English matching the list, return it unchanged (lowercase).
+            - If the query contains a recognisable part name with extra context words, return ONLY the part name.
+              Examples: "engine spark plug" → "spark plug", "replace air filter" → "air filter",
+              "check engine oil" → "engine oil", "front brake shoe" → "brake shoe" (keep position only if it is a meaningful part qualifier like front/rear).
+            - If the query is already a clean English part name from the list with no extra words, return it unchanged (lowercase).
             - Native script queries (Tamil: கண்ணாடி, Telugu: అద్దం, Kannada: ಕನ್ನಡಿ, Bengali: আয়না, Marathi: आरसा etc.) must be correctly translated.
             """;
 

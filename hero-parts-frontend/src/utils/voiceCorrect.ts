@@ -17,6 +17,7 @@ const CORRECTIONS: Record<string, string> = {
   bujhe:         'bujji',
   zanjir:        'zanjeer',
   masalah:       'masala',
+  tire:          'tyre',           // American spelling — Chrome en-IN sometimes outputs this
   tirr:          'tyre',
   tiar:          'tyre',
 
