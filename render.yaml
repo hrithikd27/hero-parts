@@ -3,7 +3,7 @@ services:
     name: hero-parts-backend
     runtime: docker
     # Build context = repo root so Docker can copy data/heropartsdb.mv.db
-    dockerfilePath: hero-parts-platform/Dockerfile
+    dockerfilePath: Dockerfile
     dockerContext: .
     plan: free
     region: singapore
