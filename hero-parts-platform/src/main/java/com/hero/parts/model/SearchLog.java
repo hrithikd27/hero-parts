@@ -46,6 +46,6 @@ public class SearchLog {
     }
 
     public enum MatchType {
-        EXACT_SKU, EXACT_NAME, ALIAS, FUZZY, NO_RESULT
+        EXACT_SKU, EXACT_NAME, ALIAS, FUZZY, NO_RESULT, IMAGE
     }
 }

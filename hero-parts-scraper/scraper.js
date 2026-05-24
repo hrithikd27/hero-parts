@@ -14,8 +14,16 @@ import { writeFileSync } from 'fs'
 import { fileURLToPath } from 'url'
 import path from 'path'
 
-const BASE_URL   = 'https://shop.heromotocorp.com'
-const OUTPUT_DIR = path.dirname(fileURLToPath(import.meta.url))
+const BASE_URL    = 'https://shop.heromotocorp.com'
+const IMAGE_BASE  = 'https://shop.heromotocorp.com/s/62ea2c599d1398fa16dbae0a/'
+const OUTPUT_DIR  = path.dirname(fileURLToPath(import.meta.url))
+
+function buildImageUrl(relativePath) {
+  if (!relativePath) return null
+  // Add -420x420 before the file extension to get the resized CDN URL
+  const withSize = relativePath.replace(/(\.[a-z]+)$/i, '-420x420$1')
+  return `${IMAGE_BASE}${withSize}`
+}
 
 const sleep = ms => new Promise(r => setTimeout(r, ms))
 
@@ -31,10 +39,15 @@ function cleanItem(item, idx) {
     ? `${item.unit_count ?? 1} ${item.unit_count_type}`
     : '1 piece'
 
+  // Extract product image from item.images[0].image (relative path) + CDN base
+  const imageUrl = Array.isArray(item.images) && item.images.length > 0
+    ? buildImageUrl(item.images[0]?.image || null)
+    : null
+
   return {
     id: idx + 1,
     name: (item.name || `Part-${alias || sku}`).replace(/\s+/g, ' ').trim(),
-    sku, price, mrp, url, slug: alias, inStock, qty, unit,
+    sku, price, mrp, url, slug: alias, inStock, qty, unit, imageUrl,
   }
 }
 
@@ -208,16 +221,17 @@ async function scrapeAllParts() {
 
   // parts.sql
   const rows = cleaned.map((p, i) => {
-    const nm = (p.name || '').replace(/'/g, "''").substring(0, 499)
-    const sk = (p.sku  || '').replace(/'/g, "''").substring(0, 49)
-    const ur = (p.url  || '').replace(/'/g, "''").substring(0, 999)
-    const sl = (p.slug || '').replace(/'/g, "''").substring(0, 299)
-    const pr = p.price != null ? p.price : 'NULL'
-    const mr = p.mrp   != null ? p.mrp   : pr
-    const st = p.inStock ? 'TRUE' : 'FALSE'
-    const qt = p.qty ?? 0
-    const cm = i < cleaned.length - 1 ? ',' : ';'
-    return `  ('${nm}', '${sk}', ${pr}, ${mr}, '${ur}', '${sl}', ${st}, ${qt})${cm}`
+    const nm  = (p.name     || '').replace(/'/g, "''").substring(0, 499)
+    const sk  = (p.sku      || '').replace(/'/g, "''").substring(0, 49)
+    const ur  = (p.url      || '').replace(/'/g, "''").substring(0, 499)
+    const sl  = (p.slug     || '').replace(/'/g, "''").substring(0, 299)
+    const img = (p.imageUrl || '').replace(/'/g, "''").substring(0, 499)
+    const pr  = p.price != null ? p.price : 'NULL'
+    const mr  = p.mrp   != null ? p.mrp   : pr
+    const st  = p.inStock ? 'TRUE' : 'FALSE'
+    const qt  = p.qty ?? 0
+    const cm  = i < cleaned.length - 1 ? ',' : ';'
+    return `  ('${nm}', '${sk}', ${pr}, ${mr}, '${ur}', '${sl}', '${img}', ${st}, ${qt})${cm}`
   })
 
   const sql = [
@@ -230,13 +244,14 @@ async function scrapeAllParts() {
     '  sku       VARCHAR(50),',
     '  price     DECIMAL(10,2),',
     '  mrp       DECIMAL(10,2),',
-    '  url       VARCHAR(1000),',
+    '  url       VARCHAR(500),',
     '  slug      VARCHAR(300),',
+    '  image_url VARCHAR(500),',
     '  in_stock  BOOLEAN DEFAULT TRUE,',
     '  stock_qty INT DEFAULT 0',
     ');',
     '',
-    'INSERT INTO scraped_parts (name, sku, price, mrp, url, slug, in_stock, stock_qty) VALUES',
+    'INSERT INTO scraped_parts (name, sku, price, mrp, url, slug, image_url, in_stock, stock_qty) VALUES',
     ...rows,
   ].join('\n')
 
@@ -247,9 +262,16 @@ async function scrapeAllParts() {
   const withUrl   = cleaned.filter(p => p.url).length
   const withPrice = cleaned.filter(p => p.price).length
   const withSku   = cleaned.filter(p => p.sku).length
-  console.log(`\n  With URL:   ${withUrl} / ${cleaned.length}`)
+  const withImage = cleaned.filter(p => p.imageUrl).length
+  console.log(`\n  With URL:   ${withUrl} / ${cleaned.length}`)4
   console.log(`  With price: ${withPrice} / ${cleaned.length}`)
   console.log(`  With SKU:   ${withSku} / ${cleaned.length}`)
+  console.log(`  With image: ${withImage} / ${cleaned.length}`)
+  if (withImage === 0 && cleaned.length > 0) {
+    const sample = allItems[0]
+    console.log('\n  [debug] First raw item keys:', Object.keys(sample).join(', '))
+    console.log('  [debug] media/medias field:', JSON.stringify(sample.medias || sample.media || sample.images || sample.thumbnail || sample.image || '(none)').substring(0, 200))
+  }
   console.log('\nNext:')
   console.log('  1. Run parts.sql in H2 console → http://localhost:8080/h2-console')
   console.log('  2. POST http://localhost:8080/api/v1/admin/load-scraped')

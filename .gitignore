@@ -21,7 +21,25 @@ Thumbs.db
 # Logs
 *.log
 npm-debug.log*
+logs/
 
 # Build output
 dist/
 build/
+
+# H2 database files (generated at runtime)
+data/
+
+# Firebase deploy cache
+.firebase/
+
+# Claude Code internal files
+.claude/
+hero-parts-platform/.claude/
+
+# Cloud config with API keys — keep secrets out of git
+hero-parts-platform/src/main/resources/application-cloud.properties
+
+# Accidentally created files
+hero-parts-platform/UsershrithOneDriveDesktoppartshero-parts-frontend.env
+hero-parts-platform/response.json

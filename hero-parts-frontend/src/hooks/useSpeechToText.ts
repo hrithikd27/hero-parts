@@ -4,7 +4,7 @@ type Status = 'idle' | 'listening' | 'error'
 
 interface UseSpeechToText {
   status: Status
-  start: (onInterim: (t: string) => void, onFinal: (t: string) => void) => void
+  start: (onInterim: (t: string) => void, onFinal: (t: string, alternatives: string[]) => void) => void
   stop: () => void
   supported: boolean
 }
@@ -58,7 +58,12 @@ export function useSpeechToText(): UseSpeechToText {
         onInterim(transcript)
 
         if (lastResult.isFinal) {
-          onFinal(transcript)
+          // Collect all alternatives so the caller can pick the best one
+          const alternatives: string[] = []
+          for (let i = 0; i < lastResult.length; i++) {
+            alternatives.push(lastResult[i].transcript)
+          }
+          onFinal(transcript, alternatives)
         }
       }
 

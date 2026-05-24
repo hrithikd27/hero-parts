@@ -1,0 +1,13 @@
+# Overrides .gitignore for Cloud Build uploads
+# data/heropartsdb.mv.db is intentionally included (pre-populated H2 database)
+.git/
+target/
+*.class
+.idea/
+*.iml
+.env
+.env.local
+application-local.properties
+logs/
+data/heropartsdb.lock.db
+data/heropartsdb.trace.db

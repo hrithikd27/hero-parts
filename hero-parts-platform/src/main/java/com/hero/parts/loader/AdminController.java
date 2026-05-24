@@ -19,9 +19,23 @@ public class AdminController {
     private final ScrapedPartsLoader loader;
     private final JdbcTemplate jdbc;
 
-    @PostMapping("/load-scraped")
+    @GetMapping("/load-scraped")
     public ResponseEntity<ApiResponse<Map<String, Object>>> loadScraped() {
         ScrapedPartsLoader.LoadResult result = loader.loadAll();
+        if (result.error() != null) {
+            return ResponseEntity.badRequest().body(ApiResponse.error(result.error()));
+        }
+        return ResponseEntity.ok(ApiResponse.ok(Map.of(
+            "inserted", result.inserted(),
+            "skipped",  result.skipped()
+        )));
+    }
+
+    /** GET /api/v1/admin/load-from-json?path=<absolute-path-to-parts.json> */
+    @GetMapping("/load-from-json")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> loadFromJson(
+            @RequestParam String path) {
+        ScrapedPartsLoader.LoadResult result = loader.loadFromJson(path);
         if (result.error() != null) {
             return ResponseEntity.badRequest().body(ApiResponse.error(result.error()));
         }

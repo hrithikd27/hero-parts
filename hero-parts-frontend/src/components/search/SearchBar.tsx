@@ -1,48 +1,43 @@
-import { useState, useRef, type KeyboardEvent } from 'react'
+import { useRef, type KeyboardEvent } from 'react'
 import { useSpeechToText } from '../../hooks/useSpeechToText'
 import { correctVoiceTranscript } from '../../utils/voiceCorrect'
+import { translateQuery } from '../../utils/translation'
 
 interface Props {
   value: string
   onChange: (v: string) => void
   onSearch: (v: string) => void
-  /** Called only when voice recognition produces a final result (after correction). */
   onVoiceResult?: (t: string) => void
+  onCameraClick?: () => void
   placeholder?: string
+  glassy?: boolean
 }
 
-export default function SearchBar({ value, onChange, onSearch, onVoiceResult, placeholder }: Props) {
-  const [focused, setFocused] = useState(false)
+export default function SearchBar({ value, onChange, onSearch, onVoiceResult, onCameraClick, placeholder, glassy }: Props) {
   const { status, start, stop, supported } = useSpeechToText()
   const isListening = status === 'listening'
-  const isError = status === 'error'
-  const inputRef = useRef<HTMLInputElement>(null)
+  const isError     = status === 'error'
+  const inputRef    = useRef<HTMLInputElement>(null)
 
   function handleKey(e: KeyboardEvent<HTMLInputElement>) {
     if (e.key === 'Enter') onSearch(value)
   }
 
   function handleMic() {
-    if (isListening) {
-      stop()
-      return
-    }
-
+    if (isListening) { stop(); return }
     start(
-      // Interim — keep the input updated so user sees words appear live
       (transcript) => onChange(transcript),
+      (transcript, alternatives) => {
+        // Pick the alternative whose corrected form matches the slang/regional dict.
+        // This handles cases where Chrome's top guess is wrong (e.g. "Canada" for
+        // Tamil "kannadi") but a lower-ranked alternative is correct.
+        const corrected = alternatives
+          .map((alt) => correctVoiceTranscript(alt))
+          .find((alt) => translateQuery(alt).wasTranslated)
+          ?? correctVoiceTranscript(transcript)
 
-      // Final — apply corrections, then feed into voice-aware handler.
-      // SearchTab's onVoiceResult sets the source='voice' flag so the search
-      // log records the correct channel.  We do NOT call onSearch here to
-      // avoid a double-search race with the 300 ms debounce.
-      (transcript) => {
-        const corrected = correctVoiceTranscript(transcript)
-        if (onVoiceResult) {
-          onVoiceResult(corrected)
-        } else {
-          onChange(corrected)
-        }
+        if (onVoiceResult) onVoiceResult(corrected)
+        else onChange(corrected)
       }
     )
     inputRef.current?.focus()
@@ -50,14 +45,28 @@ export default function SearchBar({ value, onChange, onSearch, onVoiceResult, pl
 
   const borderCls = isListening
     ? 'border-hero-red shadow-md'
-    : focused
-    ? 'border-hero-red shadow-sm'
-    : 'border-gray-200 hover:border-gray-300'
+    : glassy
+    ? 'border-white/40 hover:border-white/70 focus-within:border-white/80'
+    : 'border-gray-200 hover:border-gray-300 focus-within:border-hero-red focus-within:shadow-sm'
+
+  const containerBase = glassy
+    ? 'bg-white/15 backdrop-blur-sm border'
+    : 'bg-white border-2'
+
+  const iconCls  = glassy ? 'text-white/50' : 'text-gray-400'
+  const inputCls = glassy ? 'text-white placeholder-white/45' : 'text-gray-900 placeholder-gray-400'
+  const btnCls   = (active?: boolean) => `shrink-0 flex items-center justify-center w-6 h-6 rounded-full transition-all ${
+    active
+      ? 'bg-hero-red/25 text-hero-red'
+      : glassy
+      ? 'text-white/55 hover:text-white hover:bg-white/20'
+      : 'text-gray-400 hover:text-hero-red hover:bg-red-50'
+  }`
 
   return (
-    <div className={`flex items-center gap-3 bg-white border-2 rounded-xl px-4 py-2.5 transition-all ${borderCls}`}>
+    <div className={`flex items-center gap-2 rounded-xl px-3 overflow-hidden transition-all h-[38px] ${containerBase} ${borderCls}`}>
       {/* Search icon */}
-      <svg className="w-4 h-4 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <svg className={`w-3.5 h-3.5 shrink-0 ${iconCls}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z" />
       </svg>
 
@@ -67,69 +76,64 @@ export default function SearchBar({ value, onChange, onSearch, onVoiceResult, pl
         value={value}
         onChange={(e) => onChange(e.target.value)}
         onKeyDown={handleKey}
-        onFocus={() => setFocused(true)}
-        onBlur={() => setFocused(false)}
-        placeholder={
-          isListening
-            ? 'Listening… speak in Hindi or English'
-            : (placeholder ?? 'Search parts — try "masala", "laal seat", "shocker", "lining"…')
-        }
-        className="flex-1 bg-transparent text-gray-900 placeholder-gray-400 text-sm outline-none"
+        placeholder={isListening ? 'Listening…' : (placeholder ?? 'Search parts…')}
+        className={`flex-1 min-w-0 bg-transparent text-sm outline-none ${inputCls}`}
       />
 
-      {/* Clear button — hidden while mic is active */}
+      {/* Clear */}
       {value && !isListening && (
         <button
           onClick={() => { onChange(''); onSearch('') }}
-          className="text-gray-400 hover:text-gray-600 transition-colors shrink-0"
+          className={`shrink-0 transition-colors ${glassy ? 'text-white/40 hover:text-white/80' : 'text-gray-400 hover:text-gray-600'}`}
           aria-label="Clear"
         >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
           </svg>
         </button>
       )}
 
-      {/* Mic button */}
+      {/* Mic */}
       {supported && (
         <button
           onClick={handleMic}
-          aria-label={isListening ? 'Stop listening' : 'Search by voice'}
-          className={`relative shrink-0 flex items-center justify-center w-10 h-10 rounded-full transition-all
-            focus:outline-none focus-visible:ring-2 focus-visible:ring-hero-red
-            ${isListening
-              ? 'bg-red-200 text-hero-red'
-              : isError
-              ? 'bg-amber-100 text-amber-600'
-              : 'bg-gray-200 text-gray-600 hover:bg-red-100 hover:text-hero-red'
-            }`}
+          aria-label={isListening ? 'Stop' : 'Voice search'}
+          className={`relative ${btnCls(isListening)} ${isError ? (glassy ? '!text-amber-300' : '!text-amber-500') : ''}`}
         >
-          {/* Pulsing rings while listening */}
           {isListening && (
-            <>
-              <span className="absolute inset-0 rounded-full bg-hero-red opacity-30 animate-ping" />
-              <span className="absolute inset-[-6px] rounded-full bg-hero-red opacity-15 animate-ping [animation-delay:200ms]" />
-            </>
+            <span className="absolute inset-0 rounded-full bg-hero-red/30 animate-ping" />
           )}
-
-          {/* Icon */}
           <span className="relative z-10">
             {isListening ? (
-              /* Animated soundwave bars */
-              <span className="flex items-end gap-[2.5px] h-[18px]">
-                <span className="w-[3px] rounded-full bg-current animate-[micbar_0.55s_ease-in-out_infinite_alternate]"                        style={{ height: '35%' }} />
-                <span className="w-[3px] rounded-full bg-current animate-[micbar_0.55s_ease-in-out_infinite_alternate] [animation-delay:0.12s]" style={{ height: '100%' }} />
-                <span className="w-[3px] rounded-full bg-current animate-[micbar_0.55s_ease-in-out_infinite_alternate] [animation-delay:0.25s]" style={{ height: '65%' }} />
-                <span className="w-[3px] rounded-full bg-current animate-[micbar_0.55s_ease-in-out_infinite_alternate] [animation-delay:0.38s]" style={{ height: '85%' }} />
-                <span className="w-[3px] rounded-full bg-current animate-[micbar_0.55s_ease-in-out_infinite_alternate] [animation-delay:0.12s]" style={{ height: '50%' }} />
+              <span className="flex items-end gap-[2px] h-[14px]">
+                <span className="w-[2.5px] rounded-full bg-current animate-[micbar_0.55s_ease-in-out_infinite_alternate]"                        style={{ height: '35%' }} />
+                <span className="w-[2.5px] rounded-full bg-current animate-[micbar_0.55s_ease-in-out_infinite_alternate] [animation-delay:0.12s]" style={{ height: '100%' }} />
+                <span className="w-[2.5px] rounded-full bg-current animate-[micbar_0.55s_ease-in-out_infinite_alternate] [animation-delay:0.25s]" style={{ height: '65%' }} />
+                <span className="w-[2.5px] rounded-full bg-current animate-[micbar_0.55s_ease-in-out_infinite_alternate] [animation-delay:0.38s]" style={{ height: '85%' }} />
+                <span className="w-[2.5px] rounded-full bg-current animate-[micbar_0.55s_ease-in-out_infinite_alternate] [animation-delay:0.12s]" style={{ height: '50%' }} />
               </span>
             ) : (
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-[15px] h-[15px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <rect x="9" y="2" width="6" height="12" rx="3" strokeWidth={2} strokeLinejoin="round" />
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10a7 7 0 0 0 14 0M12 19v3M9 22h6" />
               </svg>
             )}
           </span>
+        </button>
+      )}
+
+      {/* Camera */}
+      {onCameraClick && (
+        <button
+          onClick={onCameraClick}
+          aria-label="Search by photo"
+          className={btnCls()}
+        >
+          <svg className="w-[15px] h-[15px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+              d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+            <circle cx="12" cy="13" r="3" strokeWidth={2} />
+          </svg>
         </button>
       )}
     </div>

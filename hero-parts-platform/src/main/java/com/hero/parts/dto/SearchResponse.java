@@ -13,6 +13,8 @@ public class SearchResponse {
     private int page;
     private int size;
     private List<SearchResultItem> results;
+    private String identifiedAs;
+    private List<String> suggestions;
 
     @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
     public static class SearchResultItem {

@@ -126,14 +126,36 @@ public class StartupDataLoader implements ApplicationRunner {
     @Transactional
     public void run(ApplicationArguments args) throws Exception {
         Long count = jdbc.queryForObject("SELECT COUNT(*) FROM parts", Long.class);
-        if (count != null && count >= THRESHOLD) {
-            log.info("Parts table already has {} rows — skipping seed load.", count);
-            return;
-        }
 
         ClassPathResource resource = new ClassPathResource(SEED_FILE);
         if (!resource.exists()) {
             log.warn("Seed file {} not found on classpath — skipping auto-load.", SEED_FILE);
+            return;
+        }
+
+        List<Map<String, Object>> items;
+        try (InputStream is = resource.getInputStream()) {
+            items = objectMapper.readValue(is, new TypeReference<>() {});
+        }
+
+        if (count != null && count >= THRESHOLD) {
+            log.info("Parts table already has {} rows — running image URL backfill.", count);
+            int updated = 0;
+            for (Map<String, Object> item : items) {
+                String imageUrl = str(item.get("imageUrl"));
+                if (imageUrl == null) continue;
+                String rawSku = str(item.get("sku"));
+                String slug   = str(item.get("slug"));
+                String sku = (rawSku != null && !rawSku.isBlank())
+                    ? rawSku.substring(0, Math.min(rawSku.length(), 50))
+                    : (slug != null ? slug.toUpperCase().replace("-", "_")
+                        .substring(0, Math.min(slug.length(), 50)) : null);
+                if (sku == null) continue;
+                updated += jdbc.update(
+                    "UPDATE parts SET image_url = ? WHERE sku = ? AND image_url IS NULL",
+                    imageUrl, sku);
+            }
+            log.info("Image backfill complete: {} parts updated with image URLs.", updated);
             return;
         }
 
@@ -144,86 +166,81 @@ public class StartupDataLoader implements ApplicationRunner {
         categoryRepo.findAll().forEach(c -> categoryMap.put(c.getId(), c));
         Category fallbackCategory = categoryMap.get(1L); // Engine as last resort
 
-        try (InputStream is = resource.getInputStream()) {
-            List<Map<String, Object>> items = objectMapper.readValue(
-                is, new TypeReference<>() {}
+        int inserted = 0;
+        int skipped  = 0;
+
+        for (Map<String, Object> item : items) {
+            String slug = str(item.get("slug"));
+            String name = str(item.get("name"));
+            if (slug == null || name == null) { skipped++; continue; }
+
+            String rawSku = str(item.get("sku"));
+            String sku = (rawSku != null && !rawSku.isBlank())
+                ? rawSku.substring(0, Math.min(rawSku.length(), 50))
+                : slug.toUpperCase().replace("-", "_").substring(0, Math.min(slug.length(), 50));
+
+            Long existing = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM parts WHERE sku = ?", Long.class, sku
             );
+            if (existing != null && existing > 0) { skipped++; continue; }
 
-            int inserted = 0;
-            int skipped  = 0;
+            BigDecimal price = toBD(item.get("price"));
+            BigDecimal mrp   = toBD(item.get("mrp"));
+            if (mrp == null) mrp = price;
 
-            for (Map<String, Object> item : items) {
-                String slug = str(item.get("slug"));
-                String name = str(item.get("name"));
-                if (slug == null || name == null) { skipped++; continue; }
+            String urlRaw = str(item.get("url"));
+            String eshopUrl = urlRaw != null
+                ? urlRaw.replaceFirst("^https?://[^/]+", "")
+                : null;
 
-                String rawSku = str(item.get("sku"));
-                String sku = (rawSku != null && !rawSku.isBlank())
-                    ? rawSku.substring(0, Math.min(rawSku.length(), 50))
-                    : slug.toUpperCase().replace("-", "_").substring(0, Math.min(slug.length(), 50));
+            Part part = new Part();
+            part.setSku(sku);
+            part.setName(name.substring(0, Math.min(name.length(), 500)));
+            part.setDescription("Price indicative — scraped from Hero eShop. Verify on eShop.");
+            part.setPrice(price != null ? price : BigDecimal.ZERO);
+            part.setMrp(mrp != null ? mrp : BigDecimal.ZERO);
+            part.setUnit(str(item.get("unit")) != null ? str(item.get("unit")) : "1 piece");
+            part.setEshopUrl(eshopUrl);
+            part.setImageUrl(str(item.get("imageUrl")));
+            part.setInStock(Boolean.TRUE.equals(item.get("inStock")));
+            Object qtyObj = item.get("qty");
+            part.setStockQty(qtyObj instanceof Number n ? n.intValue() : 0);
+            String nameLower = name.toLowerCase();
+            Long catId = inferCategoryId(nameLower);
+            part.setCategory(categoryMap.getOrDefault(catId, fallbackCategory));
+            em.persist(part);
 
-                Long existing = jdbc.queryForObject(
-                    "SELECT COUNT(*) FROM parts WHERE sku = ?", Long.class, sku
-                );
-                if (existing != null && existing > 0) { skipped++; continue; }
+            // Slug-based alias (English, searchable by partial name)
+            persistAlias(part, slug.replace("-", " "), SearchAlias.AliasType.SLANG, "en");
 
-                BigDecimal price = toBD(item.get("price"));
-                BigDecimal mrp   = toBD(item.get("mrp"));
-                if (mrp == null) mrp = price;
+            // Keyword-inferred Hindi / slang / symptom aliases
+            Set<String> addedAliases = new HashSet<>();
+            addedAliases.add(slug.replace("-", " "));
 
-                String urlRaw = str(item.get("url"));
-                String eshopUrl = urlRaw != null
-                    ? urlRaw.replaceFirst("^https?://[^/]+", "")
-                    : null;
-
-                Part part = new Part();
-                part.setSku(sku);
-                part.setName(name.substring(0, Math.min(name.length(), 500)));
-                part.setDescription("Price indicative — scraped from Hero eShop. Verify on eShop.");
-                part.setPrice(price != null ? price : BigDecimal.ZERO);
-                part.setMrp(mrp != null ? mrp : BigDecimal.ZERO);
-                part.setUnit(str(item.get("unit")) != null ? str(item.get("unit")) : "1 piece");
-                part.setEshopUrl(eshopUrl);
-                part.setInStock(Boolean.TRUE.equals(item.get("inStock")));
-                Object qtyObj = item.get("qty");
-                part.setStockQty(qtyObj instanceof Number n ? n.intValue() : 0);
-                String nameLower = name.toLowerCase();
-                Long catId = inferCategoryId(nameLower);
-                part.setCategory(categoryMap.getOrDefault(catId, fallbackCategory));
-                em.persist(part);
-
-                // Slug-based alias (English, searchable by partial name)
-                persistAlias(part, slug.replace("-", " "), SearchAlias.AliasType.SLANG, "en");
-
-                // Keyword-inferred Hindi / slang / symptom aliases
-                Set<String> addedAliases = new HashSet<>();
-                addedAliases.add(slug.replace("-", " "));
-
-                for (String[] entry : KEYWORD_ALIASES) {
-                    String keyword = entry[0];
-                    if (nameLower.contains(keyword)) {
-                        for (int i = 1; i < entry.length; i++) {
-                            String aliasText = entry[i];
-                            if (addedAliases.add(aliasText)) {
-                                SearchAlias.AliasType type = inferType(aliasText);
-                                String lang = isHindi(aliasText) ? "hi" : "en";
-                                persistAlias(part, aliasText, type, lang);
-                            }
+            for (String[] entry : KEYWORD_ALIASES) {
+                String keyword = entry[0];
+                if (nameLower.contains(keyword)) {
+                    for (int i = 1; i < entry.length; i++) {
+                        String aliasText = entry[i];
+                        if (addedAliases.add(aliasText)) {
+                            SearchAlias.AliasType type = inferType(aliasText);
+                            String lang = isHindi(aliasText) ? "hi" : "en";
+                            persistAlias(part, aliasText, type, lang);
                         }
                     }
                 }
-
-                inserted++;
-                if (inserted % 200 == 0) {
-                    em.flush();
-                    em.clear();
-                    log.info("  … {} / {} loaded", inserted, items.size());
-                }
             }
 
-            em.flush();
-            log.info("StartupDataLoader complete: {} inserted, {} skipped.", inserted, skipped);
+            inserted++;
+            if (inserted % 200 == 0) {
+                em.flush();
+                em.clear();
+                log.info("  … {} / {} loaded", inserted, items.size());
+            }
         }
+
+        em.flush();
+        log.info("StartupDataLoader complete: {} inserted, {} skipped.", inserted, skipped);
     }
 
     /**

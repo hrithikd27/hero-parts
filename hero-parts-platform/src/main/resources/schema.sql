@@ -78,8 +78,8 @@ CREATE TABLE IF NOT EXISTS search_logs (
     dealer_id       BIGINT,
     results_count   INT DEFAULT 0,
     top_part_sku    VARCHAR(50),
-    match_type      VARCHAR(30),  -- EXACT_SKU, EXACT_NAME, ALIAS, FUZZY, NO_RESULT
-    source          VARCHAR(10) DEFAULT 'text',  -- 'text' or 'voice'
+    match_type      VARCHAR(30),  -- EXACT_SKU, EXACT_NAME, ALIAS, FUZZY, NO_RESULT, IMAGE
+    source          VARCHAR(10) DEFAULT 'text',  -- 'text', 'voice', or 'image'
     session_id      VARCHAR(64),
     searched_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT fk_log_dealer FOREIGN KEY (dealer_id) REFERENCES dealers(id)

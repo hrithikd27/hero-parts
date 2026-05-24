@@ -7,6 +7,7 @@ interface CartStore {
   items: CartItem[]
   addItem: (part: SearchResultItem) => void
   removeItem: (sku: string) => void
+  decrementItem: (sku: string) => void
   clearCart: () => void
   total: () => number
   copyList: () => string
@@ -32,6 +33,14 @@ export const useCartStore = create<CartStore>()(
 
       removeItem: (sku) =>
         set((state) => ({ items: state.items.filter((i) => i.part.sku !== sku) })),
+
+      decrementItem: (sku) =>
+        set((state) => {
+          const item = state.items.find((i) => i.part.sku === sku)
+          if (!item) return state
+          if (item.qty <= 1) return { items: state.items.filter((i) => i.part.sku !== sku) }
+          return { items: state.items.map((i) => i.part.sku === sku ? { ...i, qty: i.qty - 1 } : i) }
+        }),
 
       clearCart: () => set({ items: [] }),
 

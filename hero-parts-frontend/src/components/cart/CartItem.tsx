@@ -7,24 +7,47 @@ interface Props {
 }
 
 export default function CartItem({ item }: Props) {
-  const removeItem = useCartStore((s) => s.removeItem)
-  const isIndicative = !item.part.eshopUrl?.includes('/product/')
+  const addItem       = useCartStore((s) => s.addItem)
+  const decrementItem = useCartStore((s) => s.decrementItem)
+  const removeItem    = useCartStore((s) => s.removeItem)
+  const isIndicative  = !item.part.eshopUrl?.includes('/product/')
 
   return (
     <div className="bg-white border border-hero-border rounded-xl p-4 flex items-center gap-3 shadow-card">
       <div className="flex-1 min-w-0">
         <p className="text-gray-900 text-sm font-medium truncate">{item.part.name}</p>
         <p className="text-gray-400 text-xs font-mono">{item.part.sku}</p>
+        <p className="text-gray-400 text-xs mt-0.5">
+          ₹{item.part.price.toLocaleString('en-IN')} each
+        </p>
       </div>
 
       <div className="text-right shrink-0">
         <p className="text-hero-red text-sm font-semibold">
           {isIndicative && <span className="text-gray-400 text-xs mr-0.5">~</span>}
-          Rs.{(item.part.price * item.qty).toLocaleString('en-IN')}
+          ₹{(item.part.price * item.qty).toLocaleString('en-IN')}
         </p>
-        <p className="text-gray-400 text-xs">
-          Rs.{item.part.price.toLocaleString('en-IN')} × {item.qty}
-        </p>
+      </div>
+
+      {/* Qty stepper */}
+      <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden shrink-0">
+        <button
+          onClick={() => decrementItem(item.part.sku)}
+          className="w-8 h-8 flex items-center justify-center text-gray-500 hover:bg-red-50 hover:text-red-500 transition-colors text-base font-bold leading-none"
+          aria-label="Remove one"
+        >
+          −
+        </button>
+        <span className="w-8 h-8 flex items-center justify-center text-sm font-bold text-gray-800 tabular-nums border-x border-gray-200">
+          {item.qty}
+        </span>
+        <button
+          onClick={() => addItem(item.part)}
+          className="w-8 h-8 flex items-center justify-center text-gray-500 hover:bg-emerald-50 hover:text-emerald-600 transition-colors text-base font-bold leading-none"
+          aria-label="Add one more"
+        >
+          +
+        </button>
       </div>
 
       <div className="flex gap-2 shrink-0">

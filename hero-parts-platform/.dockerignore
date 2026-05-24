@@ -1,0 +1,7 @@
+target/
+logs/
+data/heropartsdb.lock.db
+.claude/
+*.md
+.git/
+.gitignore
